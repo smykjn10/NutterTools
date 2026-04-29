@@ -4,7 +4,7 @@ import numpy as np
 from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator
 import asyncio
-from data_fetcher import DataFetcher
+from .data_fetcher import DataFetcher
 
 
 class AnalyticsEngine:
