@@ -5,11 +5,13 @@ from typing import Annotated
 from sqlmodel import SQLModel, create_engine, Session, select
 from database import db
 from api.assets import router
+from service_layer import ScreenerService
 
 async def lifespan(app:FastAPI):
     #----Start Up Logic
     print("initializing database")
     await db.init_db()
+    today_watchlist = ScreenerService()
     #----Shut down logic
     yield
 

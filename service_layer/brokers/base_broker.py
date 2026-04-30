@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-
+from typing import Any
 
 class BaseBroker(ABC):
     """
@@ -15,7 +15,7 @@ class BaseBroker(ABC):
         pass
 
     @abstractmethod
-    def place_order(self, action: str, asset: str, quantity: int, sl_price: float) -> Dict[str, Any]:
+    def place_order(self, action: str, asset: str, quantity: int, sl_price: float) -> dict[str, Any]:
         """Should return order details like order_id, status"""
         pass
 
