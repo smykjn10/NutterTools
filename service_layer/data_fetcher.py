@@ -31,7 +31,7 @@ class BulkDataFetcher:
         # Indian stocks need .NS suffix for Yahoo Finance
         self.suffix = ".NS"
 
-    def fetch_bulk_history(self, symbols: List[str], interval: str = "1d", period: str = "1mo") -> Dict[
+    def fetch_bulk_history(self, symbols: List[str], interval: str = "1d", period: str = "3mo") -> Dict[
         str, list[dict]]:
         """
         Fetches data for multiple stocks in O(1) network call.
