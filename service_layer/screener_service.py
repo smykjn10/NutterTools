@@ -1,5 +1,5 @@
-import os
-
+import os, pytz
+from datetime import  datetime
 from enums import Trend, FNO_UNIVERSE
 from typing import Any
 from dotenv import load_dotenv
@@ -69,6 +69,34 @@ class ScreenerService:
 
         return {"score": score, "size_multiplier": multiplier}
 
+    def _get_safest_closed_candle(self, processed_data: list) -> dict:
+        """
+        Protects the bot from Look-Ahead Bias by ensuring it only
+        calculates setups on fully closed daily candles.
+        """
+        latest_candle = processed_data[-1]
+
+        # Get Current Time in IST
+        ist = pytz.timezone('Asia/Kolkata')
+        now = datetime.now(ist)
+
+        # Assuming your data_fetcher keeps 'Date' as a datetime object
+        # yfinance puts daily candle dates at 00:00:00
+        candle_date = latest_candle['Date'].date() if hasattr(latest_candle['Date'], 'date') else latest_candle['Date']
+
+        is_today_candle = (candle_date == now.date())
+
+        # Market is "Open" (or post-market settlement) before 15:30
+        is_market_open = now.hour < 15 or (now.hour == 15 and now.minute < 30)
+
+        if is_today_candle and is_market_open:
+            # 🚨 DANGER: Live fluctuating candle! Fallback to yesterday.
+            # print("⚠️ Detected live candle. Falling back to previous day's closed candle.")
+            return processed_data[-2]
+        else:
+            # ✅ SAFE: Either morning run (yesterday's data) or evening run (today's closed data).
+            return processed_data[-1]
+
     async def get_daily_watchlist(self, requested_universe: list[str] = None) -> dict[str, dict[str, Any]]:
         '''
         1. check requested universe exists in or equal to  the list of stocks or our universe processed earlier or not
@@ -94,7 +122,7 @@ class ScreenerService:
 
         # 🔄 CACHE MISS (Analyze and Process)
         print(f"🔄 Cache Miss! Fetching & Analyzing 3-month data for {len(target_universe)} stocks...")
-        all_data = self._bulk_fetcher.fetch_bulk_history(target_universe, period="3mo", interval="1d")
+        all_data = self._bulk_fetcher.fetch_bulk_history(target_universe, period="1y", interval="1d")
         results = {}
         squeeze_threshold = os.environ.get("SQUEEZE_THRESHOLD")
         # 2. Add analytical indicators to each stock in the universe
@@ -110,8 +138,8 @@ class ScreenerService:
                 print(f"⚠️ Analytics error for {symbol}: {e}")
                 continue
 
-            latest = processed_data[-1]
-
+            # latest = processed_data[-1]
+            latest = self._get_safest_closed_candle(processed_data)
             # Defensive check for missing core indicators
             if latest.get('EMA_50') is None or latest.get('BB_Width') is None:
                 continue
