@@ -76,10 +76,10 @@ class InstitutionalBreakoutSetup(ITradingStrategy):
 
         # 4. The "Freshness" Filter (Crucial for Options)
         # Price crossed resistance, BUT is not extended more than 3% above it (Avoid chasing)
-        fresh_breakout_up = (df['Close'] > res_60) & (df['Close'] < (res_60 * 1.03))  # TODO
+        fresh_breakout_up = (df['Close'] > res_60) & (df['Close'] < (res_60 * df['ATR_14']))
 
         # Price crossed support, BUT is not extended more than 3% below it
-        fresh_breakdown_down = (df['Close'] < sup_60) & (df['Close'] > (sup_60 * 0.97))
+        fresh_breakdown_down = (df['Close'] < sup_60) & (df['Close'] > (sup_60 * df['ATR_14']))
 
         # # 🔥 5. THE NEW VOLATILITY FILTER (The "Juice" Check)
         # # The stock's average daily move must be strictly greater than 2% of its price
@@ -147,7 +147,7 @@ class PullbackBounceSetup(ITradingStrategy):
         pre_bounce_dryup = df['Volume'].shift(1) < df['VOL_SMA_20'].shift(1)
 
         # 3. Candlestick Math (Wick vs Body Size)
-        body_size = (df['Close'] - df['Open']).abs()
+        body_size = (df['Close'] - df['Open']).abs().clip(lower=0.001)
         lower_wick = df[['Close', 'Open']].min(axis=1) - df['Low']
         upper_wick = df['High'] - df[['Close', 'Open']].max(axis=1)
 
@@ -161,8 +161,8 @@ class PullbackBounceSetup(ITradingStrategy):
         strong_bear_rejection = upper_wick > (1.5 * body_size)
 
         # 5. Momentum Safety Net
-        rsi_bullish = df['RSI'] > 50
-        rsi_bearish = df['RSI'] < 50
+        rsi_bullish = df['RSI'] > settings.BULLISH_RSI
+        rsi_bearish = df['RSI'] < settings.BEARISH_RSI
 
         # # 🔥 6. THE NEW VOLATILITY FILTER (The "Juice" Check)
         # # The stock's average daily move must be strictly greater than 2% of its price
@@ -170,15 +170,16 @@ class PullbackBounceSetup(ITradingStrategy):
 
         # Condition A: Absolute Baseline.
         # Must be capable of moving at least 1% a day (Captures Nifty 50 Large Caps)
-        baseline_volatility = (df['ATR_14'] / df['Close']) >= 0.01
+        # baseline_volatility = (df['ATR_14'] / df['Close']) >= 0.01
+        is_volatile = (df['ATR_14'] / df['Close']) >= 0.01
 
         # Condition B: Volatility Expansion.
         # The short-term ATR (14 days) should be higher than the long-term ATR (50 days).
         # This proves the stock is currently "waking up" and momentum is building.
-        expanding_volatility = df['ATR_14'] > df['ATR_50']
+        # expanding_volatility = df['ATR_14'] > df['ATR_50']
 
         # Final Volatility Check
-        is_volatile = baseline_volatility & expanding_volatility
+        # is_volatile = baseline_volatility & expanding_volatility
 
 
         # 7. Final Combined Signals
