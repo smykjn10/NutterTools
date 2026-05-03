@@ -3,8 +3,7 @@ import numpy as np
 
 from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator
-import asyncio
-from data_fetcher import DataFetcher
+from ta.volatility import BollingerBands, AverageTrueRange
 
 
 class AnalyticsEngine:
@@ -118,25 +117,78 @@ class AnalyticsEngine:
         df = df.where(pd.notnull(df), other=None)
         return df.to_dict(orient="records")
 
-    # def generate_signals(self, data: list[dict], direction:str):
-    #     """
-    #     :param data:
-    #     :param direction: we are taking as input since we are making this function dependent and if it's None function does not check the direction on big timeframe it just create signals
-    #     1. check direction -> since direction is based on 1d time frame we do not need to run it everytime but each time we are getting different asset we have to handle that
-    #
-    #     2. generate signal
-    #         a) if dir is upside -> Buy if
-    #             check 9_EMA > 21_EMA, RSI> 58, Volume > 1.4* Average volume, price has crossed Resistance, retest done
-    #     :return: buy or sell or hold conviction, stop loss, targets list t1-->tn
-    #     """
-    #     data_fetcher = DataFetcher()
-    #     fetch_asset_direction_data = data_fetcher.fetch_history_data()
-    #     direction = self.get_asset_direction()
+    def add_coiled_spring_indicators(self, data: list[dict]) -> list[dict]:
+        '''
+        Calculates indicators for the 'Coiled Spring' Breakout Strategy.
+        Focuses on Squeeze, Momentum, Trend, and Volume Surge.
+        :param data:
+        :return: 50EMA, Bollinger Bands, RSI, VOL_SMA_20, ATR, PIVOTS (R1,R2, S1, S2)
+        '''
+        df = pd.DataFrame(data)
 
-    # def execution_engine(self,data:list[dict],time_frame:str)->list[dict]:
-    #     EMA_9 =
-    #     EMA_21 =
-    #     RSI_14 =
-    #     VOL_SMA_20 =
-    #
-    #     pass
+        # 1. The Trend Filter (Institutional Bias)
+        ema_50 = EMAIndicator(close=df['Close'], window=50)
+        df['EMA_50'] = ema_50.ema_indicator()
+        df['SMA_20'] = df["Close"].rolling(window=20).mean()
+
+
+        # 2. The Squeeze (Bollinger Band Width)
+        bb_ind = BollingerBands(close=df['Close'], window=20, window_dev=2)
+        df['BBU'] = bb_ind.bollinger_hband()
+        df['BBL'] = bb_ind.bollinger_lband()
+        # df['BBM'] = bb_ind.bollinger_mavg()
+        # df['BB_Width'] = (df['BBU'] - df['BBL']) / df['BBM']
+
+        # 3. The Momentum (RSI 14)
+        rsi_ind = RSIIndicator(close=df['Close'], window=14)
+        df['RSI'] = rsi_ind.rsi()
+
+        # 4. Execution Levels (ATR & Pivots)
+        atr_ind = AverageTrueRange(high=df['High'], low=df['Low'], close=df['Close'], window=14)
+        df['ATR'] = atr_ind.average_true_range()
+
+        # 5. Keltner Channels (Historical Range) -> kc_mult is usually 1.5
+        kc_mult = 1.5
+        df['KCU'] = df['SMA_20'] + (kc_mult * df['ATR'])
+        df['KCL'] = df['SMA_20'] - (kc_mult * df['ATR'])
+
+        # 🔥 ENGINE 1: True TTM Squeeze Condition (BB strictly inside KC)
+        df['Squeeze_On'] = (df['BBU'] < df['KCU']) & (df['BBL'] > df['KCL'])
+
+        # 🔥 ENGINE 2: Momentum Breakout (LONG) & Breakdown (SHORT)
+        # --- LONG SETUP (Bullish) ---
+        df['Resistance_Level'] = df['High'].shift(1).rolling(window=20).max()
+        df['Is_Breakout_Up'] = df['Close'] > df['Resistance_Level']
+        df['In_Uptrend'] = df['Close'] > df['SMA_20']
+
+        # --- SHORT SETUP (Bearish) ---
+        df['Support_Level'] = df['Low'].shift(1).rolling(window=20).min()
+        df['Is_Breakout_Down'] = df['Close'] < df['Support_Level']
+        df['In_Downtrend'] = df['Close'] < df['SMA_20']
+
+        # --- VOLUME CONFIRMATION (Dono ke liye zaroori hai) ---
+        df['VOL_SMA_20'] = df['Volume'].rolling(window=20).mean()
+        df['High_Volume'] = df['Volume'] > (1.5 * df['VOL_SMA_20'])
+
+        # --- COMBINED SIGNALS ---
+        df['Bullish_Momentum'] = df['Is_Breakout_Up'] & df['High_Volume'] & df['In_Uptrend']
+        df['Bearish_Momentum'] = df['Is_Breakout_Down'] & df['High_Volume'] & df['In_Downtrend']
+
+        # Agar Bullish ya Bearish mein se ek bhi true hai, toh signal ON hai
+        df['Momentum_Signal'] = df['Bullish_Momentum'] | df['Bearish_Momentum']
+
+        # Base Pivot
+        df['Pivot'] = (df['High'] + df['Low'] + df['Close']) / 3
+
+        # Level 1 (First Targets / Immediate Support-Resistance)
+        df['S1'] = (2 * df['Pivot']) - df['High']
+        df['R1'] = (2 * df['Pivot']) - df['Low']
+
+        # Level 2 (Second Targets / Extended Move)
+        df['S2'] = df['Pivot'] - (df['High'] - df['Low'])
+        df['R2'] = df['Pivot'] + (df['High'] - df['Low'])
+
+        # 6. JSON Sanitizer (The Pandas Trick)
+        df = df.where(pd.notnull(df), other=None)
+
+        return df.to_dict(orient="records")

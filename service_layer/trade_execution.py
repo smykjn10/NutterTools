@@ -4,19 +4,22 @@ from service_layer.data_fetcher import DataFetcher
 from service_layer.analytics import AnalyticsEngine
 
 
+# TODO - how to identify which asset to be trade today
+
 class Execution:
-    def __init__(self):
+    def __init__(self, asset: str):
+        self.asset = asset
         self.data_fetcher = DataFetcher()
         self.analyzer = AnalyticsEngine()
+        self._pre_market_analysis(asset)
 
     async def execute_trade(self, asset: str, trade_type: Literal["Equity", "Options"]):
-        # 1. PARALLEL DATA FETCHING (The Magic of asyncio.gather)
-        # We wrap the synchronous requests library calls in separate threads
-        dir_task = asyncio.to_thread(self.data_fetcher.fetch_history_data, asset, "1d")
-        exec_task = asyncio.to_thread(self.data_fetcher.fetch_history_data, asset, "30m")
+
+
+        exec_data = asyncio.to_thread(self.data_fetcher.fetch_history_data, asset=asset, period="1mo", interval="30m")
 
         # Await them together - Both network calls hit the exchange simultaneously!
-        dir_data, exec_data = await asyncio.gather(dir_task, exec_task) #TODO change the calling of direction function
+        # dir_data, exec_data = await asyncio.gather(dir_task, exec_task) #TODO change the calling of direction function
 
         # 2. ANALYZE DATA (Sequential math processing)
         exec_data_w_cators = self.analyzer.add_exec_indicators(exec_data)
@@ -49,5 +52,10 @@ class Execution:
 
         return final_action
 
+    async def _pre_market_analysis(self, asset: str):
+        '''
 
-
+        :return:
+        '''
+        pass
+        history_data_1d = self.data_fetcher.fetch_history_data(asset=asset, period="3mo")
