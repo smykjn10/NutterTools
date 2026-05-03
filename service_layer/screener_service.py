@@ -1,10 +1,10 @@
 import os, pytz
-from datetime import  datetime
+from datetime import datetime
 from enums import Trend, FNO_UNIVERSE
 from typing import Any
 from dotenv import load_dotenv
+from core.config import settings
 
-load_dotenv()
 
 
 class ScreenerService:
@@ -124,7 +124,7 @@ class ScreenerService:
         print(f"🔄 Cache Miss! Fetching & Analyzing 3-month data for {len(target_universe)} stocks...")
         all_data = self._bulk_fetcher.fetch_bulk_history(target_universe, period="1y", interval="1d")
         results = {}
-        squeeze_threshold = os.environ.get("SQUEEZE_THRESHOLD")
+        squeeze_threshold = settings.SQUEEZE_THRESHOLD
         # 2. Add analytical indicators to each stock in the universe
         for symbol, raw_data_list in all_data.items():
             # Need at least 55 days for EMA_50 to calculate properly

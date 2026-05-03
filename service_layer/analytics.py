@@ -129,24 +129,53 @@ class AnalyticsEngine:
         # 1. The Trend Filter (Institutional Bias)
         ema_50 = EMAIndicator(close=df['Close'], window=50)
         df['EMA_50'] = ema_50.ema_indicator()
+        df['SMA_20'] = df["Close"].rolling(window=20).mean()
+
 
         # 2. The Squeeze (Bollinger Band Width)
         bb_ind = BollingerBands(close=df['Close'], window=20, window_dev=2)
         df['BBU'] = bb_ind.bollinger_hband()
         df['BBL'] = bb_ind.bollinger_lband()
-        df['BBM'] = bb_ind.bollinger_mavg()
-        df['BB_Width'] = (df['BBU'] - df['BBL']) / df['BBM']
+        # df['BBM'] = bb_ind.bollinger_mavg()
+        # df['BB_Width'] = (df['BBU'] - df['BBL']) / df['BBM']
 
         # 3. The Momentum (RSI 14)
         rsi_ind = RSIIndicator(close=df['Close'], window=14)
         df['RSI'] = rsi_ind.rsi()
 
-        # 4. The Smart Money (20-Day Volume SMA)
-        df['VOL_SMA_20'] = df['Volume'].rolling(window=20).mean()
-
-        # 5. Execution Levels (ATR & Pivots)
+        # 4. Execution Levels (ATR & Pivots)
         atr_ind = AverageTrueRange(high=df['High'], low=df['Low'], close=df['Close'], window=14)
         df['ATR'] = atr_ind.average_true_range()
+
+        # 5. Keltner Channels (Historical Range) -> kc_mult is usually 1.5
+        kc_mult = 1.5
+        df['KCU'] = df['SMA_20'] + (kc_mult * df['ATR'])
+        df['KCL'] = df['SMA_20'] - (kc_mult * df['ATR'])
+
+        # 🔥 ENGINE 1: True TTM Squeeze Condition (BB strictly inside KC)
+        df['Squeeze_On'] = (df['BBU'] < df['KCU']) & (df['BBL'] > df['KCL'])
+
+        # 🔥 ENGINE 2: Momentum Breakout (LONG) & Breakdown (SHORT)
+        # --- LONG SETUP (Bullish) ---
+        df['Resistance_Level'] = df['High'].shift(1).rolling(window=20).max()
+        df['Is_Breakout_Up'] = df['Close'] > df['Resistance_Level']
+        df['In_Uptrend'] = df['Close'] > df['SMA_20']
+
+        # --- SHORT SETUP (Bearish) ---
+        df['Support_Level'] = df['Low'].shift(1).rolling(window=20).min()
+        df['Is_Breakout_Down'] = df['Close'] < df['Support_Level']
+        df['In_Downtrend'] = df['Close'] < df['SMA_20']
+
+        # --- VOLUME CONFIRMATION (Dono ke liye zaroori hai) ---
+        df['VOL_SMA_20'] = df['Volume'].rolling(window=20).mean()
+        df['High_Volume'] = df['Volume'] > (1.5 * df['VOL_SMA_20'])
+
+        # --- COMBINED SIGNALS ---
+        df['Bullish_Momentum'] = df['Is_Breakout_Up'] & df['High_Volume'] & df['In_Uptrend']
+        df['Bearish_Momentum'] = df['Is_Breakout_Down'] & df['High_Volume'] & df['In_Downtrend']
+
+        # Agar Bullish ya Bearish mein se ek bhi true hai, toh signal ON hai
+        df['Momentum_Signal'] = df['Bullish_Momentum'] | df['Bearish_Momentum']
 
         # Base Pivot
         df['Pivot'] = (df['High'] + df['Low'] + df['Close']) / 3
