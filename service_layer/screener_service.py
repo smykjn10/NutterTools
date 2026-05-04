@@ -157,7 +157,15 @@ class ScreenerService:
                             "close": round(latest_candle.get("Close", 0), 2),
                             "volume": int(latest_candle.get("Volume", 0)),
                             "atr_14": round(latest_candle.get("ATR_14", 0), 2),
-                            "signals": active_signals
+                            "signals": active_signals,
+                            # "S1": round(latest_candle.get('S1'), 2),
+                            # "R1": round(latest_candle.get('R1'), 2),
+                            # "S2": round(latest_candle.get('S1'), 2),
+                            # "R2": round(latest_candle.get('R2'), 2),
+                            "ATR_50": round(latest_candle.get('ATR_50'), 2),
+                            # "bb_width": round(bb_width, 4),
+                            "rsi": round(latest_candle.get('RSI'), 2),
+                            # "volume_ratio": round(vol_ratio, 2)
                         }
 
         # 5. UPDATE MASTER CACHE

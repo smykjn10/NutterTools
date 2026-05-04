@@ -17,7 +17,7 @@ class TTMSqueezeSetup(ITradingStrategy):
         # 🔥 THE FIX: The "Fire" Event (The Explosion)
         # Squeeze was ON yesterday (or recently), but is explicitly OFF today.
         # This proves the consolidation has just broken today!
-        squeeze_fired_today = squeeze_on.shift(1).fillna(False) & ~squeeze_on
+        squeeze_fired_today = squeeze_on.shift(1).fillna(False) & ~squeeze_on #TODO Try 1
 
         # 2. Macro Trend Filter (EMA 50 Slope)
         ema_50_rising = df['EMA_50'] > df['EMA_50'].shift(3)
