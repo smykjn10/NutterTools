@@ -2,52 +2,69 @@ import pandas as pd
 from core.config import settings
 import numpy as np
 
-from strategy_base import ITradingStrategy
+from .strategy_base import ITradingStrategy
 
 
 class TTMSqueezeSetup(ITradingStrategy):
     @property
     def name(self) -> str:
-        return "TTM_SQUEEZE"
+        return "TTM_SQUEEZE_FIRE"  # Renamed to signify ACTION, not just consolidation
 
     def generate_signal(self, df: pd.DataFrame) -> pd.Series:
-        # TODO :- this is only a signal generator setup, need to check on execution timeframe that stock had broken the squeeze
-        # 1. The Core Squeeze (Volatility Compression)
-        is_squeeze = (df['BBU'] < df['KCU']) & (df['BBL'] > df['KCL'])
+        # 1. The Core Squeeze State
+        squeeze_on = (df['BBU'] < df['KCU']) & (df['BBL'] > df['KCL'])
+
+        # 🔥 THE FIX: The "Fire" Event (The Explosion)
+        # Squeeze was ON yesterday (or recently), but is explicitly OFF today.
+        # This proves the consolidation has just broken today!
+        squeeze_fired_today = squeeze_on.shift(1).fillna(False) & ~squeeze_on
 
         # 2. Macro Trend Filter (EMA 50 Slope)
-        # Using shift(3) to see if the slope is genuinely rising/falling over the last few days
         ema_50_rising = df['EMA_50'] > df['EMA_50'].shift(3)
         ema_50_falling = df['EMA_50'] < df['EMA_50'].shift(3)
 
-        # 3. Momentum: Distance from Mean (The "Coiled" Check)
-        # Price MUST be tightly hugging the 20 SMA. If it's more than 2% away, it's not a tight coil.
-        distance_from_sma = (df['Close'] - df['SMA_20']).abs() / df['SMA_20']
-        tightly_coiled = distance_from_sma < 0.02  # Maximum 2% distance allowed
+        # 3. Momentum: The "Coiled" Check (Checked for Yesterday)
+        # We check if it was tightly coiled YESTERDAY before today's explosion
+        distance_from_sma_yesterday = (df['Close'].shift(1) - df['SMA_20'].shift(1)).abs() / df['SMA_20'].shift(1)
+        was_tightly_coiled = distance_from_sma_yesterday < 0.02
 
-        # 4. Asymmetric RSI (Avoiding the 45-55 Chop Zone)
+        # 4. Asymmetric RSI (Confirming the direction of the Fire)
         strong_bull_rsi = df['RSI'] > 55
         strong_bear_rsi = df['RSI'] < 45
 
-        # The Compression Juice (For Spring/Coil Setups)
+        # 5. The Compression Juice (Ensuring the stock isn't fundamentally dead)
         baseline_volatility = (df['ATR_14'] / df['Close']) >= 0.01
 
-        # The spring is tightly wound (Short term volatility has died down compared to historical)
+        # We want the 14-day ATR to STILL be lower than 50-day ATR,
+        # meaning the explosion has just started and has room to grow.
         contracting_volatility = df['ATR_14'] < df['ATR_50']
-
         is_volatile = baseline_volatility & contracting_volatility
 
-        # 5. Final Institutional Alignments
-        # Bullish: 20 SMA > 50 EMA + 50 EMA is rising + High RSI + Tightly Coiled around 20 SMA
-        bullish_bias = (df['SMA_20'] > df['EMA_50']) & ema_50_rising & strong_bull_rsi & tightly_coiled
+        # 6. Final Institutional Alignments
+        # BULLISH FIRE: It fired today + Uptrend Math + Tightly Coiled Yesterday
+        bullish_bias = (
+                squeeze_fired_today &
+                (df['SMA_20'] > df['EMA_50']) &
+                ema_50_rising &
+                strong_bull_rsi &
+                was_tightly_coiled &
+                is_volatile
+        )
 
-        # Bearish: 20 SMA < 50 EMA + 50 EMA is falling + Low RSI + Tightly Coiled around 20 SMA
-        bearish_bias = (df['SMA_20'] < df['EMA_50']) & ema_50_falling & strong_bear_rsi & tightly_coiled
+        # BEARISH FIRE: It fired today + Downtrend Math + Tightly Coiled Yesterday
+        bearish_bias = (
+                squeeze_fired_today &
+                (df['SMA_20'] < df['EMA_50']) &
+                ema_50_falling &
+                strong_bear_rsi &
+                was_tightly_coiled &
+                is_volatile
+        )
 
-        conditions = [is_squeeze & bullish_bias & is_volatile, is_squeeze & bearish_bias & is_volatile]
+        conditions = [bullish_bias, bearish_bias]
         choices = ['BULLISH', 'BEARISH']
 
-        return pd.Series(np.select(conditions, choices, default=''), index=df.index)
+        return pd.Series(np.select(conditions, choices, default=""), index=df.index)
 
 
 class InstitutionalBreakoutSetup(ITradingStrategy):
