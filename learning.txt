@@ -1,2 +1,130 @@
+THE MASTER RULEBOOK: 20-EMA PULLBACK ENGINE (V 1.4)
+🏗️ PHASE 1: STOCK FILTRATION (The EOD Screener)
+Trigger: Run daily at 15:30 (Post-Market) to generate tomorrow's Watchlist.
+
+1. Strict Trend Alignment (The Golden Cross):
+
+BULLISH: Close > 20_EMA AND 20_EMA > 50_EMA
+
+BEARISH: Close < 20_EMA AND 20_EMA < 50_EMA
+
+2. The Stretch Rule (Mean Reversion Fuel):
+
+BULLISH: [Max(High of last 5 days) - 20_EMA] / 20_EMA > 3.0%
+
+BEARISH: [Min(Low of last 5 days) - 20_EMA] / 20_EMA < -3.0%
+
+3. Momentum Cooldown (Rolling RSI):
+
+BULLISH: Rolling Max RSI(14) of last 10 days > 65 AND Current RSI(14) < 60
+
+BEARISH: Rolling Min RSI(14) of last 10 days < 35 AND Current RSI(14) > 40
+
+4. Institutional Footprint (Volume Contraction):
+
+Average Volume of the Pullback candles MUST BE < Average Volume of the preceding impulse (trending) candles.
+
+5. Option Velocity Filter:
+
+Daily ATR(14) / Current Close * 100 > 1.5% (Reject sluggish stocks).
+
+6. Event Blackout (IV Crush Protection):
+
+Reject stock if Earnings, Dividends, or major Corporate Actions are scheduled within ±48 hours.
+
+7. Setup Identification (The Trigger Definition):
+
+Price must be resting near the 20 EMA.
+
+The Setup Candle must be a rejection wick (Hammer/Shooting Star) OR an Inside Bar (VCP pattern - Highest Priority).
+
+🛡️ PHASE 2: PRE-ORDER CHECKS & RISK SIZING (The Master Gatekeeper)
+Trigger: Run LIVE during market hours before firing any order.
+
+1. Option Contract Selection (Theta Protection):
+
+If Days to Expiry (DTE) of the current month contract is < 10 Days, bot MUST force-select the Next Month's Expiry contract.
+
+2. LLM Global Sentiment Override (The Gap Rule):
+
+LLM Agent scrapes news and outputs Sentiment Score [-1.0 to +1.0].
+
+Score -0.6 to +0.6 (Normal): Reject trade if Gap-Up/Gap-Down is > 1.0%.
+
+Score > +0.7 (Extreme Bullish): Allow BULLISH trades even with a Gap-Up to 3.0%.
+
+Score < -0.7 (Extreme Bearish): Allow BEARISH trades even with a Gap-Down to 3.0%.
+
+3. Hard System Rejects (Do Not Trade):
+
+INDIA VIX < 11.5 -> Disable Option Buying completely. Allow Equity Swing only.
+
+Current Time > 14:00 (2:00 PM) -> Block all fresh option entries to avoid intraday Theta decay.
+
+Execution Window: NO fresh entries allowed between 09:15 AM and 09:30 AM. (Live execution starts strictly at 09:30 AM).
+
+The VIX Corridor: Only allow Option Buying if 11.5 <= INDIA VIX <= 25.0. (If outside this band, execute Equity Swing only).
+
+4. Confluence Scoring Engine (Position Sizing):
+
++1 Point: Nifty 50 Spot is aligned (Above VWAP for Bullish, Below for Bearish).
+
++1 Point: Sectoral Index is aligned (Above VWAP for Bullish, Below for Bearish).
+
++1 Point: Breakout 15m Candle RVOL (Relative Volume) is > 1.2x of its moving average.
 
 
+
+Execution Logic:
+
+Score = 3: Execute 100% Risk Quantity.
+
+Score = 2: Execute 50% Risk Quantity.
+
+Score < 2: REJECT TRADE.
+
+⚡ PHASE 3: LIVE EXECUTION (The Sniper Engine)
+Trigger: Monitored live on 15m tick data.
+
+1. The Breakout Trigger (Spot Chart):
+
+BULLISH: Spot Price crosses Setup Candle High (Yesterday's High or Inside Bar High).
+
+BEARISH: Spot Price crosses Setup Candle Low (Yesterday's Low or Inside Bar Low).
+
+2. The Slippage Gate:
+
+If Current Spot Price > (Trigger Price + 0.2%) -> ABORT (Do not chase the trade).
+
+If within 0.2% limit -> Fire MARKET ORDER in ATM (At-The-Money) Call/Put Option.
+
+🔒 PHASE 4: RISK MANAGEMENT & EXITS
+Trigger: Active while a position is open.
+
+1. The Whipsaw Armor (Initial Stop Loss):
+
+BULLISH SL Level: Current Swing Low - (0.15 * Daily ATR)
+
+BEARISH SL Level: Current Swing High + (0.15 * Daily ATR)
+
+Note: SL is strictly tracked on the SPOT chart. If Spot hits this level, instantly Market Sell the Option.
+
+2. Risk-Free State (Break-Even Shift):
+
+As soon as Unrealized Profit equals Initial Risk (1:1 Risk-Reward achieved), trail the Stop Loss directly to Entry Price (Cost).
+
+3. The Trailing Momentum Exit (Riding the Delta):
+
+BULLISH: Close ALL positions the moment a 15-minute candle closes BELOW the 15m 9-EMA.
+
+BEARISH: Close ALL positions the moment a 15-minute candle closes ABOVE the 15m 9-EMA.
+
+4. The Expiry Time-Bomb (Gamma Protection):
+
+If an open trade continues for days and the active contract's DTE reaches < 7 Days, FORCE EXIT the position immediately at market price, regardless of chart structure, to lock in profits before Theta/Gamma completely destroy the premium.
+
+The "Opening Bell" Slaughterhouse
+
+Sector Cap: Before firing an order, check active positions. IF active_positions(Sector) >= 2 -> REJECT_TRADE.
+
+Max Concurrent Trades: Never have more than 5 open positions across the entire account at any given time.

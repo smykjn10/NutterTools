@@ -41,6 +41,7 @@ app.include_router(router)
 if __name__ == "__main__":
     uvicorn.run(app)
 '''
+🗺️ Top-Down approach (Higher Timeframe for Direction, Lower Timeframe for Execution
 chlo ab analytics engine banate hai aur haan apne framework aur context ko refresh kr lo tum bhool jate ho
  "newly used technical and trading logic ko explain krna", apne response ko technical and trading logics ke 
  pov se critique and review krna, hmare bot ka kaam h bade time frame par hmare lock kiye gye 4 setups k

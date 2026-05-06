@@ -6,7 +6,7 @@ from service_layer.setups import TTMSqueezeSetup, InstitutionalBreakoutSetup, Pu
 # # print(data_fetcher)
 data_fetcher = BulkDataFetcher()
 analytics = AnalyticsEngine(
-    strategies=[TTMSqueezeSetup(), InstitutionalBreakoutSetup(), PullbackBounceSetup(), CoilNR4Setup()]
+    strategies=[PullbackBounceSetup()]
 )
 # .fetch_bulk_history(symbols=["RELIANCE"],interval="30m")
 
@@ -23,3 +23,73 @@ from service_layer.screener_service import ScreenerService
 screener = ScreenerService(data_fetcher, analytics)
 watchlist = asyncio.run(screener.generate_watchlist(None))
 print(watchlist)
+
+
+#
+# import asyncio
+# import time
+#
+#
+# async def task(name, delay):
+#     print("second")
+#     print(f"{name} started at {time.time():.2f}")
+#     await asyncio.sleep(delay)
+#     print(f"{name} finished at {time.time():.2f}")
+#
+#
+#
+# async def main():
+#     print("first")
+#     start = time.time()
+#     await asyncio.gather(
+#         task("A", 3),
+#         task("B", 3),
+#         task("C", 3)
+#     )
+#
+#     print(f"Total time: {time.time() - start:.2f}s")
+#
+#
+# asyncio.run(main())
+# #
+
+
+
+#
+#
+# async def foo():
+#     return 42
+#
+#
+#
+#
+# coro = foo()
+#
+# print(coro)
+#
+#
+#
+# def foo():
+#     print("A")
+#     yield "pause here"
+#     print("B")
+#
+# print(foo())
+#
+# for i in foo():
+#     print(i, type(i))
+#     print(type(i))
+#
+#
+
+
+
+
+
+
+
+
+
+
+
+

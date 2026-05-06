@@ -142,12 +142,14 @@ class ScreenerService:
             active_signals = []
             for name in strategy_names:
                 sig = latest_candle.get(f"SIGNAL_{name}","")
+                setup_strength = latest_candle.get(f"{name}_STRENGTH","")
                 if sig in ["BULLISH", "BEARISH"]:
                     confidence = self._calculate_confidence_score(latest_candle, name)
                     active_signals.append({
                         "setup": name,
                         "direction": sig,
-                        "confidence": confidence
+                        "confidence": confidence,
+                        "strength":setup_strength
                     })
                     # If stock triggered any setup, add to Dictionary using Symbol as Key
                     if active_signals:
@@ -162,10 +164,14 @@ class ScreenerService:
                             # "R1": round(latest_candle.get('R1'), 2),
                             # "S2": round(latest_candle.get('S1'), 2),
                             # "R2": round(latest_candle.get('R2'), 2),
-                            "ATR_50": round(latest_candle.get('ATR_50'), 2),
+                            "atr_50": round(latest_candle.get('ATR_50'), 2),
                             # "bb_width": round(bb_width, 4),
                             "rsi": round(latest_candle.get('RSI'), 2),
-                            # "volume_ratio": round(vol_ratio, 2)
+                            # "volume_ratio": round(vol_ratio, 2),
+                            "sma_20":round(latest_candle.get("SMA_20"),2),
+                            "ema_20":round(latest_candle.get("EMA_20"),2),
+                            "ema_50":round(latest_candle.get("EMA_50"),2)
+
                         }
 
         # 5. UPDATE MASTER CACHE

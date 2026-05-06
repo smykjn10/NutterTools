@@ -53,7 +53,8 @@ class BulkDataFetcher:
                 interval=interval,
                 group_by='ticker',
                 threads=True,
-                progress=False
+                progress=False,
+                auto_adjust=True
             )
         except Exception as e:
             print(f"❌ Bulk Download Error: {e}")

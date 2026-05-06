@@ -17,7 +17,7 @@ class TTMSqueezeSetup(ITradingStrategy):
         # 🔥 THE FIX: The "Fire" Event (The Explosion)
         # Squeeze was ON yesterday (or recently), but is explicitly OFF today.
         # This proves the consolidation has just broken today!
-        squeeze_fired_today = squeeze_on.shift(1).fillna(False) & ~squeeze_on #TODO Try 1
+        squeeze_fired_today = squeeze_on.shift(1).fillna(False) & ~squeeze_on  # TODO Try 1
 
         # 2. Macro Trend Filter (EMA 50 Slope)
         ema_50_rising = df['EMA_50'] > df['EMA_50'].shift(3)
@@ -123,8 +123,8 @@ class InstitutionalBreakoutSetup(ITradingStrategy):
                 pre_breakout_dryup &
                 (df['SMA_20'] > df['EMA_50']) &
                 ema_50_rising &
-                (df['RSI'] > settings.BULLISH_RSI) & # > 60 means the stock is explicitly in a "Mark-Up" phase
-                 is_volatile
+                (df['RSI'] > settings.BULLISH_RSI) &  # > 60 means the stock is explicitly in a "Mark-Up" phase
+                is_volatile
         )
 
         # BEARISH: Support Smash + Volume Surge + Downtrending MA Stack + Weak RSI
@@ -135,7 +135,7 @@ class InstitutionalBreakoutSetup(ITradingStrategy):
                 (df['SMA_20'] < df['EMA_50']) &
                 ema_50_falling &
                 (df['RSI'] < settings.BEARISH_RSI) &  # < 40 means explicit "Mark-Down" phase
-                 is_volatile
+                is_volatile
         )
 
         conditions = [bullish_alignment, bearish_alignment]
@@ -144,85 +144,101 @@ class InstitutionalBreakoutSetup(ITradingStrategy):
         return pd.Series(np.select(conditions, choices, default=''), index=df.index)
 
 
+import pandas as pd
+import numpy as np
+
+
+# from your_module import ITradingStrategy, settings # (Make sure to import your interfaces/settings)
+
 class PullbackBounceSetup(ITradingStrategy):
     @property
     def name(self) -> str:
         '''
-            "mean reversion" principle—the idea that even in a strong trend, prices eventually return to their average before continuing the move
+            "mean reversion" principle—the idea that even in a strong trend, prices eventually return to their average before continuing the move.
+            Upgraded with Factor-Based Scoring & Noise Reduction.
         '''
         return "20_EMA_PULLBACK"
 
     def generate_signal(self, df: pd.DataFrame) -> pd.Series:
-        # 1. Macro Trend Validation
-        ema_50_rising = df['EMA_50'] > df['EMA_50'].shift(3)
-        ema_50_falling = df['EMA_50'] < df['EMA_50'].shift(3)
+        # 1. Macro Trend & Tension Validation
+        # Using shift(1) to ensure the slope is rising compared to yesterday
+        ema_50_rising = df['EMA_50'] > df['EMA_50'].shift(1)
+        ema_50_falling = df['EMA_50'] < df['EMA_50'].shift(1)
 
         ema_20_above_50 = df['EMA_20'] > df['EMA_50']
         ema_20_below_50 = df['EMA_20'] < df['EMA_50']
 
-        # 2. Volume Logic: The "No Supply" Check
-        pre_bounce_dryup = df['Volume'].shift(1) < df['VOL_SMA_20'].shift(1)
+        # 🚀 OPTIMIZATION: Trend Expansion (Gap between EMAs should not be shrinking)
+        ema_gap_bull = (df['EMA_20'] - df['EMA_50']) >= (df['EMA_20'].shift(1) - df['EMA_50'].shift(1))
+        ema_gap_bear = (df['EMA_50'] - df['EMA_20']) >= (df['EMA_50'].shift(1) - df['EMA_20'].shift(1))
 
-        # 3. Candlestick Math (Wick vs Body Size)
-        body_size = (df['Close'] - df['Open']).abs().clip(lower=0.001)
-        lower_wick = df[['Close', 'Open']].min(axis=1) - df['Low']
-        upper_wick = df['High'] - df[['Close', 'Open']].max(axis=1)
+        # 2. Volume Logic: Smart Dry up during pullback, SURGE on bounce
+        # Using a 3-day rolling mean for previous days to smooth out isolated volume spikes
+        avg_vol_last_3_days = df['Volume'].shift(1).rolling(window=3).mean()
+        prev_sma_20_vol = df['VOL_SMA_20'].shift(1)
 
-        # 4. The Rejection Action
-        dipped_to_ema_bull = df['Low'] <= df['EMA_20']
+        pre_bounce_dryup = avg_vol_last_3_days < prev_sma_20_vol
+        # 🚀 OPTIMIZATION: Smart Money footprint (Volume expanded on bounce day)
+        bounce_volume_surge = df['Volume'] > df['Volume'].shift(1)
+
+        # 3. The Bounce Logic (Zones + Risk Reward)
+        # Bullish rules
+        # Max 2% deep filter to reject fake-outs that crash through EMA
+        dipped_to_ema_bull = (df['Low'] <= df['EMA_20']) & (df['Low'] >= (df['EMA_20'] * 0.98))
         closed_above_ema = df['Close'] > df['EMA_20']
-        strong_bull_rejection = lower_wick > (1.5 * body_size)
+        prev_closed_above_ema = df['Close'].shift(1) > df['EMA_20'].shift(1)
+        green_candle = df['Close'] > df['Open']  # Replaces strict wick math
+        # 🚀 OPTIMIZATION: Risk-Reward check (Close within 2.5% of EMA)
+        close_near_ema_bull = df['Close'] <= (df['EMA_20'] * 1.025)
 
-        dipped_to_ema_bear = df['High'] >= df['EMA_20']
+        # Bearish rules (Exact Inverse)
+        dipped_to_ema_bear = (df['High'] >= df['EMA_20']) & (df['High'] <= (df['EMA_20'] * 1.02))
         closed_below_ema = df['Close'] < df['EMA_20']
-        strong_bear_rejection = upper_wick > (1.5 * body_size)
+        prev_closed_below_ema = df['Close'].shift(1) < df['EMA_20'].shift(1)
+        red_candle = df['Close'] < df['Open']
+        close_near_ema_bear = df['Close'] >= (df['EMA_20'] * 0.975)
 
-        # 5. Momentum Safety Net
+        # 4. Momentum & Volatility
+        # Feel free to change 55/45 to settings.BULLISH_RSI / settings.BEARISH_RSI if imported
         rsi_bullish = df['RSI'] > settings.BULLISH_RSI
         rsi_bearish = df['RSI'] < settings.BEARISH_RSI
 
-        # # 🔥 6. THE NEW VOLATILITY FILTER (The "Juice" Check)
-        # # The stock's average daily move must be strictly greater than 2% of its price
-        # high_volatility = df['ATR'] > (df['Close'] * 0.02)
+        # The "Juice" Check - Must be capable of moving at least 2% a day
+        is_volatile = (df['ATR_14'] / df['Close']) >= 0.02
 
-        # Condition A: Absolute Baseline.
-        # Must be capable of moving at least 1% a day (Captures Nifty 50 Large Caps)
-        # baseline_volatility = (df['ATR_14'] / df['Close']) >= 0.01
-        is_volatile = (df['ATR_14'] / df['Close']) >= 0.01
+        # ---------------------------------------------------------
+        # 🧠 5. THE SCORING ENGINE (Factor-Based Weightage)
+        # ---------------------------------------------------------
 
-        # Condition B: Volatility Expansion.
-        # The short-term ATR (14 days) should be higher than the long-term ATR (50 days).
-        # This proves the stock is currently "waking up" and momentum is building.
-        # expanding_volatility = df['ATR_14'] > df['ATR_50']
-
-        # Final Volatility Check
-        # is_volatile = baseline_volatility & expanding_volatility
-
-
-        # 7. Final Combined Signals
-        bull_signal = (
-                ema_20_above_50 &
-                ema_50_rising &
-                pre_bounce_dryup &
-                dipped_to_ema_bull &
-                closed_above_ema &
-                strong_bull_rejection &
-                rsi_bullish &
-                is_volatile  # Reject slow-moving garbage
+        # Calculate Bullish Sub-Scores (Converting True/False to 1/0 and multiplying by weights)
+        bull_score = (
+                ((dipped_to_ema_bull & closed_above_ema & close_near_ema_bull & green_candle).astype(int) * 35) +
+                ((ema_20_above_50 & ema_50_rising & ema_gap_bull).astype(int) * 25) +
+                ((pre_bounce_dryup & bounce_volume_surge).astype(int) * 20) +
+                (rsi_bullish.astype(int) * 10) +
+                (is_volatile.astype(int) * 10)
         )
 
-        bear_signal = (
-                ema_20_below_50 &
-                ema_50_falling &
-                pre_bounce_dryup &
-                dipped_to_ema_bear &
-                closed_below_ema &
-                strong_bear_rejection &
-                rsi_bearish &
-                is_volatile  # Reject slow-moving garbage
+        # Calculate Bearish Sub-Scores
+        bear_score = (
+                ((dipped_to_ema_bear & closed_below_ema & close_near_ema_bear & red_candle).astype(int) * 35) +
+                ((ema_20_below_50 & ema_50_falling & ema_gap_bear).astype(int) * 25) +
+                ((pre_bounce_dryup & bounce_volume_surge).astype(int) * 20) +
+                (rsi_bearish.astype(int) * 10) +
+                (is_volatile.astype(int) * 10)
         )
 
-        conditions = [bull_signal, bear_signal]
+        # Inject the strength score directly into the dataframe for the execution engine
+        # (It stores whichever score is higher)
+        df[f'{self.name}_STRENGTH'] = np.where(bull_score >= bear_score, bull_score, bear_score)
+
+        # Threshold Rule: Signal triggers ONLY if conviction is 75 or higher out of 100
+        MINIMUM_THRESHOLD = 75
+
+        bull_signal_passed = bull_score >= MINIMUM_THRESHOLD
+        bear_signal_passed = bear_score >= MINIMUM_THRESHOLD
+
+        conditions = [bull_signal_passed, bear_signal_passed]
         choices = ['BULLISH', 'BEARISH']
 
         return pd.Series(np.select(conditions, choices, default=""), index=df.index)
@@ -265,15 +281,11 @@ class CoilNR4Setup(ITradingStrategy):
         ema_20_above_50 = df['EMA_20'] > df['EMA_50']
         ema_20_below_50 = df['EMA_20'] < df['EMA_50']
 
-
-
-        bullish_coil = base_coil & ema_20_above_50 & (df['RSI'] > 50 )
-        bearish_coil = base_coil & ema_20_below_50 & (df['RSI'] < 50 )
+        bullish_coil = base_coil & ema_20_above_50 & (df['RSI'] > 50)
+        bearish_coil = base_coil & ema_20_below_50 & (df['RSI'] < 50)
 
         conditions = [bullish_coil, bearish_coil]
         choices = ['BULLISH', 'BEARISH']
 
         # Using "" for clean JSON serialization later
         return pd.Series(np.select(conditions, choices, default=""), index=df.index)
-
-
