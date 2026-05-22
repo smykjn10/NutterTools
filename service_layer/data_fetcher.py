@@ -1,6 +1,9 @@
+import time
+
 import yfinance as yf
 import pandas as pd
 from typing import List, Dict
+
 
 
 class DataFetcher:
@@ -28,7 +31,84 @@ class DataFetcher:
 
 
 
+
 class BulkDataFetcher:
+    def __init__(self):
+        self.suffix = ".NS"
+
+    def fetch_bulk_history(self, stock_list:list[str], interval: str = "1d", period:str = "1y",retries:int=3)->dict[str,pd.DataFrame]:
+        stock_data = {}
+        if not stock_list:
+            return stock_data
+        stock_list = [f"{stock}{self.suffix}" for stock in stock_list]
+        print(f"📡 Downloading bulk data for {len(stock_list)} assets...")
+        data = pd.DataFrame()
+        for attempt in range(retries):
+            try:
+                data = yf.download(
+                    period=period,
+                    interval=interval,
+                    tickers=stock_list,
+                    group_by='ticker',
+                    auto_adjust=True,
+                    threads=True,
+                    progress=True
+                )
+            except Exception as e:
+                print(f"⚠️ Attempt {attempt + 1} failed: {e}")
+                if attempt < retries - 1:
+                    time.sleep(2**attempt)
+                else:
+                    return stock_data
+            else:
+                if data.empty:
+                    return stock_data
+                else:
+                    break
+
+        is_intraday = interval != "1d"
+        is_multi_index = isinstance(data.columns, pd.MultiIndex)
+
+        for s in stock_list:
+            if is_multi_index:
+                if s in data.columns.levels[0]:
+                    df_ticker = data[s].copy()
+                else:
+                    continue
+            else:
+                # If only 1 symbol was requested, 'data' is already the target DataFrame
+                df_ticker = data.copy()
+            df_ticker = df_ticker.dropna()
+            if df_ticker.empty:
+                continue
+            # Extract Datetime from Index to a Column
+            df_ticker = df_ticker.reset_index()
+            date_col = next((col for col in ["Datetime", "Date", "index"] if col in df_ticker.columns), None)
+            if date_col:
+                # Guarantee datetime format
+                df_ticker[date_col] = pd.to_datetime(df_ticker[date_col])
+
+                # Modern Check: Fix Timezone mapping to standard IST
+                if df_ticker[date_col].dt.tz is not None:
+                    df_ticker[date_col] = df_ticker[date_col].dt.tz_convert('Asia/Kolkata').dt.tz_localize(None)
+
+                # JSON-Safe Formatting based on timeframe (Required since we are returning list[dict])
+                if is_intraday:
+                    df_ticker[date_col] = df_ticker[date_col].dt.strftime('%Y-%m-%d %H:%M:%S')
+                    df_ticker.rename(columns={date_col: 'Datetime'}, inplace=True)
+                else:
+                    df_ticker[date_col] = df_ticker[date_col].dt.strftime('%Y-%m-%d')
+                    df_ticker.rename(columns={date_col: 'Date'}, inplace=True)
+
+                # Return clean JSON structure for independent modules (Original Architecture)
+            stock_data[s] = df_ticker
+
+        return stock_data
+
+
+
+
+class BulkDataFetcher_BKP_2:
     def __init__(self):
         # Indian stocks need .NS suffix for Yahoo Finance
         self.suffix = ".NS"
@@ -187,3 +267,9 @@ class BulkDataFetcher_BKP:
                 result_map[s] = df_ticker.to_dict(orient="records")
 
         return result_map
+
+
+from enums import FNO_UNIVERSE
+fetcher = BulkDataFetcher()
+data = fetcher.fetch_bulk_history(["RELIANCE"])
+print(data)
